@@ -1,30 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-<defs>
-  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#202a40"/><stop offset="1" stop-color="#0b1020"/></linearGradient>
-  <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffc34d"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
-</defs>
-<rect width="256" height="256" rx="48" fill="url(#bg)"/>
-<circle cx="128" cy="105" r="78" fill="#ffffff" opacity=".06"/>
-<!-- wizard -->
-<path d="M35 99 60 49 84 82 73 79 76 105Z" fill="#9a78d2"/>
-<path d="M26 107 57 91 87 105 70 116 43 115Z" fill="#9a78d2"/>
-<path d="M48 117 79 117 89 159 67 183 44 157Z" fill="#8060bd"/>
-<!-- central adventurer -->
-<path d="M100 69 113 48 125 63 141 46 147 70 160 82 153 113 104 113 94 91Z" fill="#f8e8c8"/>
-<path d="M104 91 Q105 75 128 74 Q151 75 152 95 L147 119 Q128 142 109 119Z" fill="#f8e8c8"/>
-<path d="M92 126 116 117 128 128 141 117 165 126 183 190 73 190Z" fill="#f8e8c8"/>
-<path d="M111 125 128 139 145 125 158 183 98 183Z" fill="#172033"/>
-<circle cx="128" cy="145" r="5" fill="#f8e8c8"/>
-<!-- archer -->
-<path d="M170 81 Q170 52 195 56 Q218 60 219 83 L211 111 181 111Z" fill="#86ad7b"/>
-<path d="M178 91 Q195 80 211 92 L208 119 Q195 135 181 119Z" fill="#86ad7b"/>
-<path d="M174 127 193 119 211 130 225 184 182 184Z" fill="#557e5a"/>
-<path d="M186 74 201 61 210 76 198 71 190 84Z" fill="#b6d5a5"/>
-<!-- map -->
-<path d="M31 197 65 187 96 197 132 190 167 198 203 189 227 202 212 218 175 225 139 218 99 228 61 219 34 213Z" fill="#e7bf87"/>
-<path d="M53 204 78 198 96 205 73 211Z M145 209 170 200 190 205 164 215Z" fill="#bd9465"/>
-<!-- plus -->
-<circle cx="202" cy="194" r="35" fill="#0b1020" opacity=".95"/>
-<circle cx="199" cy="190" r="31" fill="url(#gold)"/>
-<path d="M195 172h8a4 4 0 0 1 4 4v10h10a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-10v10a4 4 0 0 1-4 4h-8a4 4 0 0 1-4-4v-10h-10a4 4 0 0 1-4-4v-8a4 4 0 0 1 4-4h10v-10a4 4 0 0 1 4-4Z" fill="#172033"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<rect width="256" height="256" rx="40" fill="#202a40"/>
+<path d="M30 102 59 48 86 91 70 85 76 112Z" fill="#9a78d2"/>
+<path d="M40 119 79 119 89 158 65 184 43 158Z" fill="#8060bd"/>
+<path d="M100 74 114 48 128 66 143 48 157 77 151 111 104 111Z" fill="#f8e8c8"/>
+<path d="M105 93Q106 76 128 76Q150 76 151 95L147 119Q128 140 109 119Z" fill="#f8e8c8"/>
+<path d="M92 128 115 119 128 132 142 119 164 128 182 190 74 190Z" fill="#f8e8c8"/>
+<path d="M111 128 128 141 145 128 158 183 98 183Z" fill="#172033"/>
+<path d="M172 82Q173 55 195 58Q217 61 218 84L210 111 181 111Z" fill="#86ad7b"/>
+<path d="M178 93Q195 81 211 93L208 119Q195 135 181 119Z" fill="#86ad7b"/>
+<path d="M174 129 193 120 211 131 225 184 182 184Z" fill="#557e5a"/>
+<path d="M31 198 65 188 96 198 132 191 167 199 203 190 227 203 212 219 175 226 139 219 99 229 61 220 34 214Z" fill="#e7bf87"/>
+<circle cx="199" cy="190" r="31" fill="#fbbf24"/>
+<path d="M194 171h10v14h14v10h-14v14h-10v-14h-14v-10h14Z" fill="#172033"/>
 </svg>
