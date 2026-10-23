@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "manifest_version": 1,
   "description": "Шаблони персонажів, призначення власника й синхронізація токенів між картами.",
+  "icon": "https://ihorshvachka.github.io/owlbear-characters-extension/icon.svg",
   "action": {
     "title": "Персонажі",
     "popover": "https://ihorshvachka.github.io/owlbear-characters-extension/",
