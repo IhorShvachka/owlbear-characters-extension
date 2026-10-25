@@ -1,196 +1,116 @@
-import OBR, { buildImage } from "@owlbear-rodeo/sdk";
+import OBR from "@owlbear-rodeo/sdk";
 import "./style.css";
+import { readDnd5eJsonFile, type Dnd5eSheet } from "./dnd5e-import";
 
-const EXTENSION_ID = "com.ihorshvachka.characters";
-const ROOM_KEY = `${EXTENSION_ID}.characters.v1`;
-const TOKEN_KEY = `${EXTENSION_ID}.characterId`;
-
-type CharacterRecord = {
-  id: string; name: string; ownerName: string; ownerId: string;
-  tokenName: string; properties: Record<string, unknown>; updatedAt: number;
-};
-type CharacterStore = { characters: CharacterRecord[] };
-type TokenSummary = { id: string; name: string; type: string };
-type RoomPlayer = { id: string; name: string; role: "GM" | "PLAYER" };
-
+const KEY = "com.ihorshvachka.characters.sheets.prototype.v1";
+type RecordSheet = { id: string; ownerId: string; ownerName: string; sheet: Dnd5eSheet; updatedAt: number };
+type Player = { id: string; name: string; role: "GM" | "PLAYER" };
+type Store = { sheets: RecordSheet[] };
 const app = document.querySelector<HTMLDivElement>("#app")!;
-app.innerHTML = `
-  <header><div class="eyebrow">OWLBEAR RODEO · РОЗШИРЕННЯ</div><h1>Персонажі</h1><p class="muted">Шаблони персонажів і прив’язка токенів до гравців.</p></header>
-  <section class="panel"><div class="section-title">ПРИЗНАЧИТИ ПЕРСОНАЖА</div>
-    <p class="hint">Вибери токен на поточній карті та признач власника. Позначені копії одного персонажа на активній карті синхронізуються без перенесення позиції, повороту й масштабу.</p>
-    <label>Токен на поточній карті<select id="token"><option value="">Завантаження токенів…</option></select></label>
-    <label>Ім’я персонажа<input id="character-name" maxlength="100" placeholder="Наприклад, Елара"></label>
-    <label>Власник персонажа<select id="owner-player"><option value="">Не призначено</option></select></label>
-    <button id="assign">Зберегти шаблон і прив’язати токен</button><button id="reload" class="secondary">Оновити список токенів</button>
-    <div class="notice">Для обмеження керування гравцями ввімкни в Owlbear дозвіл <strong>Character → Owner Only</strong>. Реальну поведінку власності потрібно перевірити в кімнаті з кількома гравцями.</div>
-    <div id="status" role="status" class="status">Підключення до Owlbear Rodeo…</div>
-  </section>
-  <section class="panel"><div class="section-title">ЗБЕРЕЖЕНІ ШАБЛОНИ</div><div id="characters" class="characters"><p class="muted">Завантаження…</p></div></section>
-  <footer>Шаблони зберігаються в метаданих кімнати. Синхронізація між різними сценами виконується під час активації сцени; миттєва синхронізація неактивних сцен не підтримується.</footer>`;
+app.innerHTML = '<header><div class="eyebrow">OWLBEAR RODEO · D&D 5E</div><h1>Листи персонажів</h1><p class="muted">Імпорт JSON та персональні листи.</p></header><div class="notice"><strong>Прототип:</strong> листи зберігаються у спільних метаданих кімнати. Приховування в інтерфейсі не забезпечує приватності. Не використовуй для секретних даних до підключення захищеного сервера.</div><div id="status" class="status">Підключення…</div><section id="gm-tools" class="panel hidden"><div class="section-title">ІМПОРТ JSON · ГМ</div><label>Файл персонажа D&D 5e<input id="file" type="file" accept=".json,application/json"></label><div id="preview" class="preview muted">Вибери JSON для попереднього перегляду.</div><label>Призначити гравцю<select id="owner"><option value="">Не призначено</option></select></label><button id="import" disabled>Імпортувати</button></section><section id="gm-list" class="panel hidden"><div class="section-title">УСІ ПЕРСОНАЖІ</div><div id="roster"></div></section><section class="panel"><div class="section-title">ЛИСТ ПЕРСОНАЖА</div><h2 id="sheet-name">Очікування даних…</h2><p id="sheet-meta" class="muted"></p><div id="empty" class="empty">ГМ ще не призначив тобі персонажа.</div><div id="sheet" class="hidden"><div id="stats" class="stats-grid"></div><div class="section-title subsection">ХАРАКТЕРИСТИКИ</div><div id="abilities" class="ability-grid"></div><div class="section-title subsection">БОЙОВІ ДАНІ</div><div class="fields"><label>Поточні HP<input id="hp" type="number" min="0"></label><label>Максимальні HP<input id="maxhp" type="number" min="0"></label><label>Клас обладунку<input id="ac" type="number" min="0"></label><label>Ініціатива<input id="initiative" type="number"></label><label>Швидкість<input id="speed"></label><label class="wide">Нотатки<textarea id="notes" rows="3"></textarea></label></div><button id="save">Зберегти зміни</button><div class="section-title subsection">НАВИЧКИ ТА РЯТУВАЛЬНІ КИДКИ</div><div id="skills" class="data-list"></div><div class="section-title subsection">СПОРЯДЖЕННЯ</div><div id="equipment" class="data-list"></div><div class="section-title subsection">ЗАКЛИНАННЯ</div><div id="spells" class="data-list"></div><div class="section-title subsection">УМІННЯ ТА РИСИ</div><div id="features" class="data-list"></div><details><summary>Оригінальний JSON</summary><pre id="raw"></pre></details></div></section><footer>D&D 5e · Підтримка інших форматів додаватиметься адаптерами.</footer>';
 
-const tokenSelect = app.querySelector<HTMLSelectElement>("#token")!;
-const nameInput = app.querySelector<HTMLInputElement>("#character-name")!;
-const ownerSelect = app.querySelector<HTMLSelectElement>("#owner-player")!;
-const status = app.querySelector<HTMLDivElement>("#status")!;
-const charactersEl = app.querySelector<HTMLDivElement>("#characters")!;
-let tokens: TokenSummary[] = [];
-let roomPlayers: RoomPlayer[] = [];
-let store: CharacterStore = { characters: [] };
-let ready = false;
-let syncing = false;
-const lastSnapshot = new Map<string, string>();
-const pendingSyncWrites = new Map<string, string>();
-const SYNCABLE_FIELDS = new Set(["name","visible","locked","zIndex","disableHit","disableAutoZIndex","description","image","grid","text","textItemType"]);
-
-function syncableProperties(item: Record<string, any>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const key of SYNCABLE_FIELDS) if (Object.prototype.hasOwnProperty.call(item, key)) result[key] = item[key];
-  return result;
+const $ = <T extends HTMLElement>(s: string) => app.querySelector<T>(s)!;
+const status = $("#status");
+const owner = $("#owner") as HTMLSelectElement;
+const fileInput = $("#file") as HTMLInputElement;
+const preview = $("#preview");
+const importButton = $("#import") as HTMLButtonElement;
+const roster = $("#roster");
+let ready = false, isGM = false, playerId = "", pending: Dnd5eSheet | null = null, activeId = "";
+let players: Player[] = [];
+let store: Store = { sheets: [] };
+const esc = (v: unknown): string => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"} as Record<string,string>)[c]!);
+const say = (s: string) => { status.textContent = s; };
+const active = () => store.sheets.find(s => s.id === activeId) || null;
+const canEdit = (s: RecordSheet) => isGM || s.ownerId === playerId;
+function renderOwners() {
+  const prev = owner.value;
+  owner.innerHTML = '<option value="">Не призначено</option>' + players.filter(p=>p.role!=="GM").map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join("");
+  if (players.some(p=>p.id===prev)) owner.value=prev;
 }
-function fingerprint(value: unknown): string { return JSON.stringify(value); }
-function message(text: string): void { status.textContent = text; }
-function safe(value: unknown): string {
-  return String(value ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"} as Record<string,string>)[c]!);
+function renderRoster() {
+  if (!isGM) return;
+  if (!store.sheets.length) { roster.innerHTML='<p class="muted">Персонажів поки немає.</p>'; return; }
+  roster.innerHTML=store.sheets.map(s=>'<article class="roster-item"><div><strong>'+esc(s.sheet.name)+'</strong><div class="muted">'+esc(s.ownerName||"Не призначено")+'</div></div><div class="roster-actions"><select data-owner="'+esc(s.id)+'" aria-label="Призначити гравця"><option value="">Не призначено</option>'+players.filter(p=>p.role!=="GM").map(p=>'<option value="'+esc(p.id)+'" '+(p.id===s.ownerId?'selected':'')+'>'+esc(p.name)+'</option>').join("")+'</select><button class="secondary" data-open="'+esc(s.id)+'">Відкрити</button><button class="danger" data-delete="'+esc(s.id)+'">Видалити</button></div></article>').join("");
 }
-async function loadStore(): Promise<void> {
-  const metadata = await OBR.room.getMetadata();
-  const value = metadata[ROOM_KEY] as CharacterStore | undefined;
-  store = value && Array.isArray(value.characters) ? value : { characters: [] };
-  renderCharacters();
+function renderList(target: string, items: unknown[]) {
+  const el=$(target);
+  if (!items.length) { el.innerHTML='<p class="muted">Дані не розпізнані або відсутні.</p>'; return; }
+  el.innerHTML=items.slice(0,100).map(item=>{
+    if(typeof item==="string"||typeof item==="number") return '<div class="data-row">'+esc(item)+'</div>';
+    const o=item&&typeof item==="object"?item as Record<string,unknown>:{};
+    const name=o.name??o.label??o.title??o.definition??"Елемент", detail=o.description??o.quantity??o.notes??"";
+    return '<div class="data-row"><strong>'+esc(typeof name==="object"?JSON.stringify(name):name)+'</strong><span class="muted">'+esc(typeof detail==="object"?JSON.stringify(detail):detail)+'</span></div>';
+  }).join("");
 }
-async function saveStore(): Promise<void> { await OBR.room.setMetadata({ [ROOM_KEY]: store }); }
-async function loadPlayers(): Promise<void> {
-  try {
-    const players = await OBR.party.getPlayers();
-    roomPlayers = players.map(player => ({id:player.id,name:player.name,role:player.role})).sort((a,b) => a.role !== b.role ? (a.role === "GM" ? -1 : 1) : a.name.localeCompare(b.name,"uk"));
-    const previous = ownerSelect.value;
-    ownerSelect.innerHTML = '<option value="">Не призначено</option>' + roomPlayers.map(player => `<option value="${safe(player.id)}">${safe(player.name)}${player.role === "GM" ? " · ведучий" : ""}</option>`).join("");
-    if (roomPlayers.some(player => player.id === previous)) ownerSelect.value = previous;
-  } catch (error) { console.error("Could not load room players", error); message("Не вдалося завантажити список гравців кімнати."); }
+function renderSheet() {
+  const s=active();
+  const empty=$("#empty"), panel=$("#sheet"), name=$("#sheet-name"), meta=$("#sheet-meta");
+  if(!s) { name.textContent=isGM?"Вибери персонажа":"Немає призначеного листа"; meta.textContent=""; empty.classList.remove("hidden"); panel.classList.add("hidden"); return; }
+  empty.classList.add("hidden"); panel.classList.remove("hidden");
+  const d=s.sheet, editable=canEdit(s);
+  name.textContent=d.name; meta.textContent=[d.race,d.className,d.level!==null?"Рівень "+d.level:""].filter(Boolean).join(" · ");
+  $("#stats").innerHTML=[["HP",(d.hitPoints.current??"—")+" / "+(d.hitPoints.maximum??"—")],["КЗ",d.armorClass??"—"],["Ініціатива",d.initiative??"—"],["Бонус майстерності",d.proficiencyBonus??"—"]].map(x=>'<div class="stat-card"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong></div>').join("");
+  const labels: Record<string,string>={str:"СИЛ",dex:"СПР",con:"СТІЛ",int:"ІНТ",wis:"МУД",cha:"ХАР"};
+  $("#abilities").innerHTML=Object.entries(d.abilities).map(([k,v])=>'<div class="ability"><span>'+labels[k]+'</span><strong>'+(v??"—")+'</strong><small>'+(v===null?"—":((Math.floor((v-10)/2)>=0?"+":"")+Math.floor((v-10)/2)))+'</small></div>').join("");
+  const fields: Array<[string,unknown]>=[["#hp",d.hitPoints.current],["#maxhp",d.hitPoints.maximum],["#ac",d.armorClass],["#initiative",d.initiative],["#speed",d.speed],["#notes",d.notes]];
+  fields.forEach(([id,v])=>{const el=$(id) as HTMLInputElement|HTMLTextAreaElement;el.value=v===null||v===undefined?"":String(v);el.disabled=!editable;});
+  ($("#save") as HTMLButtonElement).classList.toggle("hidden",!editable);
+  $("#raw").textContent=JSON.stringify(d.raw,null,2);
+  renderList("#skills",Object.entries(d.skills).map(([name,value])=>({name,value})));
+  renderList("#equipment",d.equipment);renderList("#spells",d.spells);renderList("#features",d.features);
 }
-async function loadTokens(): Promise<void> {
-  try {
-    const items = await OBR.scene.items.getItems();
-    tokens = items.filter(item => item.type === "IMAGE" || item.type === "ATTACHMENT").map(item => ({id:item.id,name:item.name?.trim() || `Без назви · ${item.id.slice(0,8)}`,type:item.type})).sort((a,b) => a.name.localeCompare(b.name,"uk"));
-    const previous = tokenSelect.value;
-    tokenSelect.innerHTML = '<option value="">Вибери токен…</option>' + tokens.map(token => `<option value="${safe(token.id)}">${safe(token.name)} · ${safe(token.type)}</option>`).join("");
-    if (tokens.some(token => token.id === previous)) tokenSelect.value = previous;
-    if (!tokens.length) message("На поточній карті не знайдено відповідних токенів.");
-  } catch (error) { console.error("Could not load scene items",error); message("Не вдалося прочитати токени поточної карти."); }
+async function loadStore() {
+  const metadata=await OBR.room.getMetadata(), value=metadata[KEY] as Store|undefined;
+  store=value&&Array.isArray(value.sheets)?value:{sheets:[]};
+  if(!isGM&&!store.sheets.some(s=>s.id===activeId&&s.ownerId===playerId)) activeId=store.sheets.find(s=>s.ownerId===playerId)?.id||"";
+  if(isGM&&!store.sheets.some(s=>s.id===activeId)) activeId="";
+  renderRoster();renderSheet();
 }
-function renderCharacters(): void {
-  if (!store.characters.length) { charactersEl.innerHTML = '<p class="muted">Шаблонів поки немає.</p>'; return; }
-  charactersEl.innerHTML = store.characters.slice().sort((a,b)=>a.name.localeCompare(b.name,"uk")).map(character => `
-    <article class="character"><div><strong>${safe(character.name)}</strong><div class="muted">Токен: ${safe(character.tokenName)}</div><div class="muted">Гравець: ${safe(character.ownerName || "Не призначений")}</div></div>
-    <div class="character-actions"><button class="secondary" data-create="${safe(character.id)}">Створити копію</button><button class="secondary remove" data-remove="${safe(character.id)}">Видалити</button></div></article>`).join("");
-}
-async function reconcileActiveScene(): Promise<void> {
-  if (!ready || syncing) return;
-  syncing = true;
-  try {
-    const items = await OBR.scene.items.getItems();
-    const linked = items.filter((item:any) => item?.metadata?.[TOKEN_KEY]);
-    for (const item of linked as any[]) {
-      const record = store.characters.find(entry => entry.id === String(item.metadata[TOKEN_KEY]));
-      if (!record) continue;
-      const current = syncableProperties(item);
-      if (fingerprint(current) === fingerprint(record.properties)) { lastSnapshot.set(item.id,fingerprint(current)); continue; }
-      const expected = fingerprint(record.properties); pendingSyncWrites.set(item.id,expected);
-      await OBR.scene.items.updateItems([item.id], draft => { for (const target of draft as any[]) for (const [key,value] of Object.entries(record.properties)) target[key] = value; });
-      lastSnapshot.set(item.id,expected);
-    }
-    await loadTokens();
-  } catch (error) { console.error("Could not reconcile active scene",error); }
-  finally { syncing = false; }
-}
-async function handleSceneItems(items: any[]): Promise<void> {
-  if (!ready || syncing) return;
-  syncing = true;
-  try {
-    const linked = items.filter(item => item?.metadata?.[TOKEN_KEY]);
-    const updates = new Map<string,Record<string,unknown>>();
-    let changed = false;
-    for (const item of linked) {
-      const id = String(item.metadata[TOKEN_KEY]);
-      const record = store.characters.find(entry => entry.id === id);
-      if (!record) continue;
-      const props = syncableProperties(item), current = fingerprint(props), previous = lastSnapshot.get(item.id);
-      const pending = pendingSyncWrites.get(item.id);
-      if (pending !== undefined && pending === current) { pendingSyncWrites.delete(item.id); lastSnapshot.set(item.id,current); continue; }
-      if (pending !== undefined) pendingSyncWrites.delete(item.id);
-      if (previous === undefined) { lastSnapshot.set(item.id,current); continue; }
-      if (previous === current) continue;
-      lastSnapshot.set(item.id,current); record.properties = props; record.tokenName = item.name || record.tokenName; record.updatedAt = Date.now(); updates.set(id,props); changed = true;
-    }
-    for (const [id,props] of updates) for (const peer of linked) {
-      if (String(peer.metadata[TOKEN_KEY]) !== id || fingerprint(syncableProperties(peer)) === fingerprint(props)) continue;
-      const expected = fingerprint(props); pendingSyncWrites.set(peer.id,expected);
-      await OBR.scene.items.updateItems([peer.id],draft => { for (const target of draft as any[]) for (const [key,value] of Object.entries(props)) target[key] = value; });
-      lastSnapshot.set(peer.id,expected);
-    }
-    if (changed) { await saveStore(); renderCharacters(); }
-  } catch (error) { console.error("Character sync failed",error); }
-  finally { syncing = false; }
-}
-async function createCharacterCopy(characterId: string): Promise<void> {
-  const record = store.characters.find(entry => entry.id === characterId);
-  if (!record) return;
-  if (await OBR.player.getRole() !== "GM") { message("Створювати копії персонажів може лише ведучий."); return; }
-  const props = record.properties as Record<string,any>;
-  if (!props.image || !props.grid) { message("У цього шаблону немає даних зображення, необхідних для створення копії."); return; }
-  try {
-    const center = await OBR.viewport.getPosition();
-    const builder = buildImage(props.image,props.grid).name(record.name).position({x:center.x,y:center.y}).rotation(0).scale({x:1,y:1}).layer("CHARACTER").metadata({[TOKEN_KEY]:record.id});
-    if (record.ownerId) builder.createdUserId(record.ownerId);
-    if (typeof props.visible === "boolean") builder.visible(props.visible);
-    if (typeof props.locked === "boolean") builder.locked(props.locked);
-    if (typeof props.description === "string") builder.description(props.description);
-    if (typeof props.zIndex === "number") builder.zIndex(props.zIndex);
-    if (props.text) builder.text(props.text);
-    if (props.textItemType === "LABEL" || props.textItemType === "TEXT") builder.textItemType(props.textItemType);
-    if (typeof props.disableHit === "boolean") builder.disableHit(props.disableHit);
-    if (typeof props.disableAutoZIndex === "boolean") builder.disableAutoZIndex(props.disableAutoZIndex);
-    await OBR.scene.items.addItems([builder.build()]);
-    await loadTokens(); message(`Копію «${record.name}» додано в центр поточного перегляду. Її позицію можна змінювати незалежно від інших копій.`);
-  } catch (error) { console.error("Could not create character copy",error); message("Не вдалося створити копію персонажа. Перевір консоль Owlbear для деталей."); }
-}
-app.querySelector<HTMLButtonElement>("#reload")!.addEventListener("click",()=>void loadTokens());
-app.querySelector<HTMLButtonElement>("#assign")!.addEventListener("click",async()=>{
-  if (!ready) return;
-  if (await OBR.player.getRole() !== "GM") { message("Призначати персонажів може лише ведучий."); return; }
-  const token = tokens.find(item=>item.id===tokenSelect.value);
-  if (!token) { message("Спочатку вибери токен зі списку."); return; }
-  const name = nameInput.value.trim() || token.name, owner = roomPlayers.find(player=>player.id===ownerSelect.value), ownerName=owner?.name??"", ownerId=owner?.id??"";
-  try {
-    const items = await OBR.scene.items.getItems([token.id]), selected = items[0] as any;
-    if (!selected) { message("Токен більше не знайдено на цій карті. Онови список."); return; }
-    const existing = store.characters.find(character=>character.id===selected.metadata?.[TOKEN_KEY]), recordId=existing?.id??crypto.randomUUID();
-    await OBR.scene.items.updateItems([selected.id],draft=>{for(const target of draft){target.metadata={...target.metadata,[TOKEN_KEY]:recordId};target.name=name;if(ownerId)target.createdUserId=ownerId;}});
-    const refreshed=(await OBR.scene.items.getItems([selected.id]))[0] as any;
-    if(!refreshed) throw new Error("Token disappeared after tagging");
-    const properties=syncableProperties(refreshed); properties.name=name;
-    const record:CharacterRecord={id:recordId,name,ownerName,ownerId,tokenName:token.name,properties,updatedAt:Date.now()};
-    store.characters=[...store.characters.filter(character=>character.id!==record.id),record];
-    lastSnapshot.set(refreshed.id,fingerprint(record.properties)); await saveStore();renderCharacters();
-    message(`Шаблон «${name}» збережено. Синхронізація працює для позначених копій активної карти.`);
-  } catch(error){console.error("Could not save character template",error);message("Не вдалося зберегти шаблон. Перевір консоль Owlbear для деталей.");}
+async function saveStore() { await OBR.room.setMetadata({[KEY]:store}); }
+fileInput.addEventListener("change",async()=>{
+  pending=null;importButton.disabled=true;preview.textContent="Перевірка JSON…";
+  const file=fileInput.files?.[0];if(!file)return;
+  try{
+    pending=await readDnd5eJsonFile(file);const d=pending;
+    preview.className="preview";preview.innerHTML='<strong>'+esc(d.name)+'</strong><p class="muted">'+esc([d.race,d.className,d.level!==null?"Рівень "+d.level:""].filter(Boolean).join(" · "))+'</p><div class="preview-stats"><span>HP '+esc(d.hitPoints.current??"—")+'/'+esc(d.hitPoints.maximum??"—")+'</span><span>КЗ '+esc(d.armorClass??"—")+'</span><span>Навичок '+Object.keys(d.skills).length+'</span><span>Заклинань '+d.spells.length+'</span></div>';
+    importButton.disabled=false;say("JSON перевірено. Признач гравця та імпортуй.");
+  }catch(e){preview.textContent=e instanceof Error?e.message:"Не вдалося прочитати JSON.";say(preview.textContent);}
 });
-charactersEl.addEventListener("click",async event=>{
-  const target=event.target as HTMLElement, createButton=target.closest<HTMLButtonElement>("[data-create]");
-  if(createButton?.dataset.create&&ready){await createCharacterCopy(createButton.dataset.create);return;}
-  const button=target.closest<HTMLButtonElement>("[data-remove]"),id=button?.dataset.remove;
-  if(!id||!ready)return;
-  store.characters=store.characters.filter(character=>character.id!==id);
-  try{await saveStore();renderCharacters();message("Шаблон видалено. Токени на карті не видалялися.");}
-  catch(error){console.error(error);message("Не вдалося видалити шаблон.");}
+importButton.addEventListener("click",async()=>{
+  if(!ready||!isGM||!pending)return;
+  if(JSON.stringify(pending.raw).length>9000){say("JSON завеликий для метаданих кімнати. Імпорт скасовано: потрібне зовнішнє сховище.");return;}
+  const p=players.find(x=>x.id===owner.value);
+  const rec:RecordSheet={id:crypto.randomUUID(),ownerId:p?.id||"",ownerName:p?.name||"",sheet:pending,updatedAt:Date.now()};
+  store.sheets.push(rec);activeId=rec.id;
+  try{await saveStore();await loadStore();renderOwners();fileInput.value="";pending=null;importButton.disabled=true;preview.textContent="Вибери JSON для попереднього перегляду.";say("Персонажа імпортовано.");}
+  catch{store.sheets=store.sheets.filter(s=>s.id!==rec.id);say("Не вдалося зберегти. Можливо, перевищено ліміт метаданих.");}
+});
+roster.addEventListener("click",async e=>{
+  const t=e.target as HTMLElement, open=t.closest<HTMLButtonElement>("[data-open]"), del=t.closest<HTMLButtonElement>("[data-delete]");
+  if(open?.dataset.open){activeId=open.dataset.open;renderSheet();}
+  if(del?.dataset.delete&&isGM){store.sheets=store.sheets.filter(s=>s.id!==del.dataset.delete);if(activeId===del.dataset.delete)activeId="";try{await saveStore();await loadStore();say("Персонажа видалено.");}catch{say("Не вдалося видалити персонажа.");}}
+});
+roster.addEventListener("change",async e=>{
+  const el=(e.target as HTMLElement).closest<HTMLSelectElement>("[data-owner]");if(!el||!isGM)return;
+  const s=store.sheets.find(x=>x.id===el.dataset.owner);if(!s)return;
+  const p=players.find(x=>x.id===el.value);s.ownerId=p?.id||"";s.ownerName=p?.name||"";s.updatedAt=Date.now();
+  try{await saveStore();await loadStore();say("Призначення оновлено.");}catch{say("Не вдалося зберегти призначення.");}
+});
+$("#save").addEventListener("click",async()=>{
+  const s=active();if(!s||!canEdit(s))return;
+  const num=(id:string)=>{const v=($(id) as HTMLInputElement).value.trim();return v===""?null:Number(v);};
+  s.sheet.hitPoints.current=num("#hp");s.sheet.hitPoints.maximum=num("#maxhp");s.sheet.armorClass=num("#ac");s.sheet.initiative=num("#initiative");
+  s.sheet.speed=($("#speed") as HTMLInputElement).value;s.sheet.notes=($("#notes") as HTMLTextAreaElement).value;s.updatedAt=Date.now();
+  try{await saveStore();renderSheet();say("Зміни збережено.");}catch{say("Не вдалося зберегти зміни.");}
 });
 OBR.onReady(async()=>{
   try{
-    await loadStore();await loadTokens();await loadPlayers();ready=true;message("Підключено до Owlbear Rodeo.");
-    const initial=await OBR.scene.items.getItems();await handleSceneItems(initial as any[]);
-    OBR.scene.items.onChange(items=>{void loadTokens();void handleSceneItems(items as any[]);});
-    OBR.scene.onReadyChange(sceneReady=>{if(!sceneReady)return;void(async()=>{await loadStore();await reconcileActiveScene();})();});
-    OBR.room.onMetadataChange(()=>{void loadStore().then(()=>reconcileActiveScene());});
-    OBR.party.onChange(()=>void loadPlayers());
-  }catch(error){console.error("Characters extension initialization failed",error);message("Не вдалося ініціалізувати розширення в цій кімнаті.");}
+    playerId=await OBR.player.getId();isGM=await OBR.player.getRole()==="GM";
+    $("#gm-tools").classList.toggle("hidden",!isGM);$("#gm-list").classList.toggle("hidden",!isGM);
+    players=(await OBR.party.getPlayers()).map(p=>({id:p.id,name:p.name,role:p.role}));renderOwners();ready=true;
+    await loadStore();say(isGM?"Підключено як ГМ. Імпортуй JSON персонажа.":"Підключено. Показано лист, призначений твоєму профілю.");
+    OBR.party.onChange(async()=>{players=(await OBR.party.getPlayers()).map(p=>({id:p.id,name:p.name,role:p.role}));renderOwners();renderRoster();});
+    OBR.room.onMetadataChange(()=>{void loadStore().catch(e=>console.error(e));});
+  }catch(e){console.error(e);say("Не вдалося ініціалізувати розширення.");}
 });
