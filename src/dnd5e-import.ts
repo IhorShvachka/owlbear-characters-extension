@@ -53,9 +53,12 @@ export function normalizeDnd5eJson(input: unknown): Dnd5eSheet {
   const stats = asObject(first(data.stats, data.abilities, data.abilityScores));
   const combat = asObject(first(data.combat, data.defenses));
   const hp = asObject(first(data.hitPoints, data.hp, combat.hitPoints, combat.hp));
-  const classes = array(first(data.classes, data.class)).map(item => asObject(item));
+  // A plain string class (e.g. "Ranger") is a valid common export shape,
+  // but it must not be treated as a class object and normalized to an empty name.
+  const classSource = first(data.classes, typeof data.class === "string" ? undefined : data.class);
+  const classes = array(classSource).map(item => asObject(item));
   const className = classes.length
-    ? classes.map(item => text(first(item.name, item.definition && asObject(item.definition).name, item.className))).filter(Boolean).join(" / ")
+    ? classes.map(item => text(first(item.name, asObject(item.definition).name, item.className))).filter(Boolean).join(" / ")
     : text(first(data.className, typeof data.class === "string" ? data.class : undefined, asObject(data.class).name));
   const ability = (short: string, long: string): number | null => {
     const value = first(stats[short], stats[long], asObject(stats[long]).score, asObject(data[short]).score, data[long]);
