@@ -1,14 +1,14 @@
 {
   "name": "Персонажі",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "manifest_version": 1,
-  "description": "Шаблони персонажів, призначення власника й синхронізація токенів між картами.",
-  "icon": "https://ihorshvachka.github.io/owlbear-characters-extension/icon.svg?v=0.1.3",
+  "description": "Інтерактивні листи персонажів D&D 5e з імпортом JSON (розробка).",
+  "icon": "https://ihorshvachka.github.io/owlbear-characters-extension/icon.svg?v=0.2.0",
   "action": {
-    "title": "Персонажі",
-    "icon": "https://ihorshvachka.github.io/owlbear-characters-extension/icon.svg?v=0.1.3",
-    "popover": "https://ihorshvachka.github.io/owlbear-characters-extension/?v=0.1.3",
-    "width": 520,
-    "height": 760
+    "title": "Листи персонажів",
+    "icon": "https://ihorshvachka.github.io/owlbear-characters-extension/icon.svg?v=0.2.0",
+    "popover": "https://ihorshvachka.github.io/owlbear-characters-extension/?v=0.2.0",
+    "width": 560,
+    "height": 820
   }
 }
