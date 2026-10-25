@@ -24,5 +24,7 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Unit tests
+        run: npm test
       - name: TypeScript and Vite build
         run: npm run build
